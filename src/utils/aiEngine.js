@@ -19,16 +19,19 @@ export function calculateRow(row) {
   const marginGrosir1 = parseFloat(row.marginGrosir1) || 0;
   const marginGrosir2 = parseFloat(row.marginGrosir2) || 0;
 
-  // 1. Harga setelah diskon
-  const hargaSetelahDiskon = harga - diskonRupiah;
+  // 1. Total harga awal (sebelum diskon)
+  const totalHargaAwal = harga * qty;
 
-  // 2. Hitung PPN — diterapkan ke harga setelah diskon
+  // 2. Harga setelah diskon
+  const hargaSetelahDiskon = totalHargaAwal - diskonRupiah;
+
+  // 3. Hitung PPN — diterapkan ke harga setelah diskon
   const ppnNominal = ppnRupiah;
 
-  // 3. Total modal = harga setelah diskon + PPN
+  // 4. Total modal = harga setelah diskon + PPN
   const totalModal = hargaSetelahDiskon + ppnNominal;
 
-  // 4. Harga efektif per pcs
+  // 5. Harga efektif per pcs (Modal Satuan Akhir)
   const hargaPerQty = qty > 0 ? totalModal / qty : 0;
 
   // Alias untuk kompatibilitas

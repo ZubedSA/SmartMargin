@@ -153,66 +153,58 @@ export default function App() {
       if (i !== index) return row;
 
       let updatedRow = { ...row, [field]: value };
+      
       const harga = parseFloat(updatedRow.harga) || 0;
+      const qty = parseFloat(updatedRow.qty) || 1;
+      const totalHargaAwal = harga * qty;
 
-      if (field === 'harga') {
-        if (updatedRow.diskonPersen !== '') {
-          const dPersen = parseFloat(updatedRow.diskonPersen) || 0;
-          updatedRow.diskonRupiah = dPersen > 0 ? String(Math.round((harga * dPersen / 100) * 100) / 100) : '';
-        }
-        const dRupiah = parseFloat(updatedRow.diskonRupiah) || 0;
-        const hargaSetelahDiskon = harga - dRupiah;
-        if (updatedRow.ppnPersen !== '') {
-          const pPersen = parseFloat(updatedRow.ppnPersen) || 0;
-          updatedRow.ppnRupiah = pPersen > 0 ? String(Math.round((hargaSetelahDiskon * pPersen / 100) * 100) / 100) : '';
-        }
-      }
-      else if (field === 'diskonPersen') {
+      // Handle diskon
+      if (field === 'diskonPersen') {
         if (value === '') {
           updatedRow.diskonRupiah = '';
         } else {
           const dPersen = parseFloat(value) || 0;
-          updatedRow.diskonRupiah = String(Math.round((harga * dPersen / 100) * 100) / 100);
+          updatedRow.diskonRupiah = String(Math.round((totalHargaAwal * dPersen / 100) * 100) / 100);
         }
-        const dRupiah = parseFloat(updatedRow.diskonRupiah) || 0;
-        const hargaSetelahDiskon = harga - dRupiah;
-        if (updatedRow.ppnPersen !== '') {
-          const pPersen = parseFloat(updatedRow.ppnPersen) || 0;
-          updatedRow.ppnRupiah = pPersen > 0 ? String(Math.round((hargaSetelahDiskon * pPersen / 100) * 100) / 100) : '';
-        }
-      }
-      else if (field === 'diskonRupiah') {
+      } else if (field === 'diskonRupiah') {
         if (value === '') {
           updatedRow.diskonPersen = '';
         } else {
           const dRupiah = parseFloat(value) || 0;
-          updatedRow.diskonPersen = harga > 0 ? String(Math.round((dRupiah / harga * 100) * 100) / 100) : '0';
+          updatedRow.diskonPersen = totalHargaAwal > 0 ? String(Math.round((dRupiah / totalHargaAwal * 100) * 100) / 100) : '0';
         }
-        const dRupiah = parseFloat(updatedRow.diskonRupiah) || 0;
-        const hargaSetelahDiskon = harga - dRupiah;
-        if (updatedRow.ppnPersen !== '') {
-          const pPersen = parseFloat(updatedRow.ppnPersen) || 0;
-          updatedRow.ppnRupiah = pPersen > 0 ? String(Math.round((hargaSetelahDiskon * pPersen / 100) * 100) / 100) : '';
+      } else if (field === 'harga' || field === 'qty') {
+        // Jika harga atau qty berubah, hitung ulang diskonRupiah dari diskonPersen (jika ada)
+        if (updatedRow.diskonPersen !== '') {
+          const dPersen = parseFloat(updatedRow.diskonPersen) || 0;
+          updatedRow.diskonRupiah = dPersen > 0 ? String(Math.round((totalHargaAwal * dPersen / 100) * 100) / 100) : '';
         }
       }
-      else if (field === 'ppnPersen') {
-        const dRupiah = parseFloat(updatedRow.diskonRupiah) || 0;
-        const hargaSetelahDiskon = harga - dRupiah;
+
+      // Hitung state sementara untuk PPN
+      const dRupiah = parseFloat(updatedRow.diskonRupiah) || 0;
+      const hargaSetelahDiskon = totalHargaAwal - dRupiah;
+
+      // Handle PPN
+      if (field === 'ppnPersen') {
         if (value === '') {
           updatedRow.ppnRupiah = '';
         } else {
           const pPersen = parseFloat(value) || 0;
           updatedRow.ppnRupiah = String(Math.round((hargaSetelahDiskon * pPersen / 100) * 100) / 100);
         }
-      }
-      else if (field === 'ppnRupiah') {
-        const dRupiah = parseFloat(updatedRow.diskonRupiah) || 0;
-        const hargaSetelahDiskon = harga - dRupiah;
+      } else if (field === 'ppnRupiah') {
         if (value === '') {
           updatedRow.ppnPersen = '';
         } else {
           const pRupiah = parseFloat(value) || 0;
           updatedRow.ppnPersen = hargaSetelahDiskon > 0 ? String(Math.round((pRupiah / hargaSetelahDiskon * 100) * 100) / 100) : '0';
+        }
+      } else if (field === 'harga' || field === 'qty' || field === 'diskonPersen' || field === 'diskonRupiah') {
+        // Jika parameter harga berubah, hitung ulang ppnRupiah dari ppnPersen
+        if (updatedRow.ppnPersen !== '') {
+          const pPersen = parseFloat(updatedRow.ppnPersen) || 0;
+          updatedRow.ppnRupiah = pPersen > 0 ? String(Math.round((hargaSetelahDiskon * pPersen / 100) * 100) / 100) : '';
         }
       }
 
@@ -236,19 +228,22 @@ export default function App() {
     const newRows = parsedItems.map(item => {
       const row = createEmptyRow();
       const harga = parseFloat(item.harga) || 0;
+      const qty = parseFloat(item.qty) || 1;
+      const totalHargaAwal = harga * qty;
+      
       row.harga = String(harga || '');
       row.qty = String(item.qty || '1');
-      
+
       let dRupiah = parseFloat(item.diskonRupiah) || 0;
       let dPersen = parseFloat(item.diskonPersen) || 0;
       if (dPersen > 0 && dRupiah === 0) {
-        dRupiah = (harga * dPersen) / 100;
+        dRupiah = (totalHargaAwal * dPersen) / 100;
       }
       row.diskonRupiah = dRupiah > 0 ? String(dRupiah) : '';
       row.diskonPersen = dPersen > 0 ? String(dPersen) : '';
 
-      const hargaSetelahDiskon = harga - dRupiah;
-      
+      const hargaSetelahDiskon = totalHargaAwal - dRupiah;
+
       let pRupiah = parseFloat(item.ppnRupiah) || 0;
       let pPersen = parseFloat(item.ppnPersen) || 0;
       if (pPersen > 0 && pRupiah === 0) {
@@ -256,7 +251,7 @@ export default function App() {
       }
       row.ppnRupiah = pRupiah > 0 ? String(pRupiah) : '';
       row.ppnPersen = pPersen > 0 ? String(pPersen) : '';
-      
+
       return row;
     });
 
@@ -388,13 +383,13 @@ export default function App() {
         onClose={() => setIsCalcOpen(false)}
       />
 
-      <SettingsModal 
-        isOpen={isSettingsOpen} 
-        onClose={() => setIsSettingsOpen(false)} 
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
       />
 
-      <ReceiptScannerModal 
-        isOpen={isScannerOpen} 
+      <ReceiptScannerModal
+        isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}
         onSuccess={handleScannerSuccess}
         onOpenSettings={() => setIsSettingsOpen(true)}

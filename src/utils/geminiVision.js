@@ -7,6 +7,11 @@ export async function processReceiptImage(base64Image, apiKey) {
     throw new Error('API Key tidak ditemukan.');
   }
 
+  // Bypass langsung ke OCR Offline jika API Key diset 'OFFLINE' atau 'KOSONG'
+  if (apiKey.trim().toUpperCase() === 'OFFLINE') {
+    return await fallbackTesseractOCR(base64Image);
+  }
+
   // Hapus prefix "data:image/jpeg;base64," atau sejenisnya
   const base64Data = base64Image.split(',')[1] || base64Image;
 
@@ -151,8 +156,14 @@ Pastikan mengembalikan JSON mentah yang bisa diparse dengan JSON.parse().`;
         const isQuotaExceeded = response.status === 429 || errorMessage.toLowerCase().includes('quota exceeded');
         const isUnavailable = response.status === 404 || errorMessage.toLowerCase().includes('no longer available') || errorMessage.toLowerCase().includes('not found') || errorMessage.toLowerCase().includes('deprecated');
 
-        if (isHighDemand || isQuotaExceeded || isUnavailable) {
-          lastError = new Error(`Model ${cleanModelName} gagal (sibuk/kuota/tidak tersedia). Mencoba alternatif...`);
+        if (isQuotaExceeded) {
+          lastError = new Error(`Model ${cleanModelName} gagal karena limit kuota. Langsung beralih ke offline agar cepat...`);
+          console.warn(lastError.message);
+          break; // Putus loop agar tidak menunggu 9 model gagal
+        }
+
+        if (isHighDemand || isUnavailable) {
+          lastError = new Error(`Model ${cleanModelName} gagal (sibuk/tidak tersedia). Mencoba alternatif...`);
           console.warn(lastError.message);
           continue; 
         }
@@ -298,8 +309,24 @@ function parseReceiptText(text) {
             }
           }
           
+          let unitPrice = lastNum;
+          if (qty > 1) {
+            // Coba periksa apakah ada angka harga satuan tertulis di struk
+            if (numbers.length >= 3) {
+               const prevNumStr = numbers[numbers.length - 2 === numbers.indexOf(qty.toString()) ? numbers.length - 3 : numbers.length - 2].replace(/[.,]/g, '');
+               const prevNum = parseInt(prevNumStr, 10);
+               if (!isNaN(prevNum) && prevNum > 100 && Math.abs((prevNum * qty) - lastNum) <= 10) {
+                 unitPrice = prevNum; // Menggunakan harga satuan eksplisit
+               } else {
+                 unitPrice = Math.round(lastNum / qty); // Derivasi harga satuan
+               }
+            } else {
+               unitPrice = Math.round(lastNum / qty);
+            }
+          }
+
           items.push({
-            harga: lastNum, // Sementara anggap angka terakhir sbg harga satuan/total
+            harga: unitPrice, // Sekarang selalu memasukkan Harga Satuan (Unit Price)
             qty: qty,
             diskonRupiah: 0,
             diskonPersen: 0,
