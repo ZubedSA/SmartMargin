@@ -2,6 +2,37 @@ import React, { useState, useRef, useEffect } from 'react';
 import { X, Upload, Camera, FileText, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { processReceiptImage } from '../utils/geminiVision';
 
+const compressImage = (base64Str, maxWidth = 1000, maxHeight = 1000, quality = 0.6) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+      
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(base64Str);
+  });
+};
+
 export default function ReceiptScannerModal({ isOpen, onClose, onSuccess, onOpenSettings }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
@@ -69,10 +100,13 @@ export default function ReceiptScannerModal({ isOpen, onClose, onSuccess, onOpen
 
     // Tampilkan preview
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const base64 = event.target.result;
-      setImagePreview(base64);
-      processImage(base64);
+      setImagePreview(base64); // Tetap tampilkan resolusi asli untuk preview
+      
+      // Kompres gambar sebelum dikirim ke AI atau Tesseract agar super cepat
+      const compressedBase64 = await compressImage(base64, 1000, 1000, 0.6);
+      processImage(compressedBase64);
     };
     reader.onerror = () => {
       setError('Gagal membaca file gambar.');
@@ -122,7 +156,7 @@ export default function ReceiptScannerModal({ isOpen, onClose, onSuccess, onOpen
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const base64 = canvas.toDataURL('image/jpeg', 0.8);
+      const base64 = canvas.toDataURL('image/jpeg', 0.6); // Kompresi langsung ke 0.6
       
       stopCamera();
       setIsCameraActive(false);
