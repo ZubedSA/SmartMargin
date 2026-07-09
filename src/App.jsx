@@ -235,12 +235,28 @@ export default function App() {
   const handleScannerSuccess = (parsedItems) => {
     const newRows = parsedItems.map(item => {
       const row = createEmptyRow();
-      row.harga = String(item.harga || '');
+      const harga = parseFloat(item.harga) || 0;
+      row.harga = String(harga || '');
       row.qty = String(item.qty || '1');
-      row.diskonRupiah = String(item.diskonRupiah || '');
-      row.diskonPersen = String(item.diskonPersen || '');
-      row.ppnRupiah = String(item.ppnRupiah || '');
-      row.ppnPersen = String(item.ppnPersen || '');
+      
+      let dRupiah = parseFloat(item.diskonRupiah) || 0;
+      let dPersen = parseFloat(item.diskonPersen) || 0;
+      if (dPersen > 0 && dRupiah === 0) {
+        dRupiah = (harga * dPersen) / 100;
+      }
+      row.diskonRupiah = dRupiah > 0 ? String(dRupiah) : '';
+      row.diskonPersen = dPersen > 0 ? String(dPersen) : '';
+
+      const hargaSetelahDiskon = harga - dRupiah;
+      
+      let pRupiah = parseFloat(item.ppnRupiah) || 0;
+      let pPersen = parseFloat(item.ppnPersen) || 0;
+      if (pPersen > 0 && pRupiah === 0) {
+        pRupiah = (hargaSetelahDiskon * pPersen) / 100;
+      }
+      row.ppnRupiah = pRupiah > 0 ? String(pRupiah) : '';
+      row.ppnPersen = pPersen > 0 ? String(pPersen) : '';
+      
       return row;
     });
 

@@ -13,13 +13,18 @@ export async function processReceiptImage(base64Image, apiKey) {
   const prompt = `Anda adalah sistem OCR cerdas untuk aplikasi kalkulator margin.
 Saya akan memberikan foto nota/faktur/struk pembelian. 
 Tugas Anda adalah mengekstrak semua baris produk yang ada di nota tersebut.
-Untuk setiap produk, temukan:
-- harga: Harga total untuk produk tersebut atau harga satuan (yang penting total modal). Kembalikan dalam angka (contoh: 150000).
+Untuk setiap produk fisik, temukan:
+- harga: Harga SATUAN sebelum dikali qty dan sebelum diskon/ppn. Kembalikan dalam angka (contoh: 150000). Jika tertulis total harga, pastikan 'harga' adalah harga satuannya jika memungkinkan, atau Anda bisa menaruh total harga dan membiarkan qty = 1.
 - qty: Jumlah barang. Jika tidak tertulis, default 1.
-- diskonRupiah: Jika ada diskon tertulis dalam nominal.
-- diskonPersen: Jika ada diskon tertulis dalam persentase.
-- ppnRupiah: Jika ada pajak/PPN untuk barang tersebut. (Opsional, 0 jika tidak ada)
+- diskonRupiah: Jika ada diskon tertulis dalam nominal untuk barang tersebut. (Opsional, 0 jika tidak ada)
+- diskonPersen: Jika ada diskon tertulis dalam persentase. (Opsional, 0 jika tidak ada)
+- ppnRupiah: Jika ada pajak/PPN nominal. (Opsional, 0 jika tidak ada)
 - ppnPersen: Jika ada pajak/PPN persentase. (Opsional, 0 jika tidak ada)
+
+INSTRUKSI KRITIKAL:
+1. PPN GLOBAL: Jika nota memiliki total PPN di bagian bawah (misal PPN 11% atau nominal tertentu yang mengindikasikan pajak keseluruhan), WAJIB bagikan PPN tersebut ke SETIAP item. Isi \`ppnPersen\` (misal: 11) pada setiap baris item JSON. Jangan buat PPN sebagai item terpisah!
+2. DISKON SEBAGAI ITEM NEGATIF: Jika ada baris diskon yang ditulis layaknya barang namun harganya negatif (misal: -39,810), JANGAN buat itu sebagai barang terpisah di JSON! Masukkan angka tersebut (dijadikan positif) ke kolom \`diskonRupiah\` pada barang tepat di atasnya.
+3. Jangan pernah memasukkan 'PPN', 'Diskon', atau 'Total' sebagai entri barang (item). Output JSON murni berisi barang yang dibeli saja.
 
 KEMBALIKAN OUTPUT HANYA DALAM FORMAT JSON ARRAY SEPERTI INI (TANPA MARKDOWN, TANPA TEKS LAIN):
 [
@@ -57,7 +62,7 @@ Pastikan mengembalikan JSON mentah yang bisa diparse dengan JSON.parse().`;
 
   try {
     // Cari model yang tersedia (Auto-Discovery)
-    const modelsResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
+    const modelsResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
     let selectedModel = null;
     let availableModelsString = '';
     let availableModels = [];
@@ -83,17 +88,29 @@ Pastikan mengembalikan JSON mentah yang bisa diparse dengan JSON.parse().`;
       } else if (availableModels.includes('models/gemini-pro-vision')) {
         selectedModel = 'gemini-pro-vision';
       }
+    } else {
+      // Jika fetch daftar model gagal, mungkin karena quota 429 atau API key salah
+      const errorData = await modelsResponse.json().catch(() => ({}));
+      const errMsg = errorData.error?.message || `Gagal mengambil daftar model (HTTP ${modelsResponse.status}).`;
+      
+      if (modelsResponse.status === 429 || errMsg.toLowerCase().includes('quota')) {
+         throw new Error('Kuota API Anda habis. Harap tunggu beberapa saat lalu coba lagi.');
+      }
+      throw new Error(`Koneksi ke Google API ditolak: ${errMsg}. Pastikan API Key benar dan masih aktif.`);
     }
 
     if (!selectedModel) {
-       throw new Error(`API Key Anda tidak memiliki akses ke model Vision yang didukung. Model di akun Anda: ${availableModelsString || 'Gagal mengambil daftar model.'}`);
+       throw new Error(`API Key Anda tidak memiliki akses ke model Vision yang didukung. Model di akun Anda: ${availableModelsString || 'Kosong.'}`);
     }
 
-    // Urutan prioritas model untuk dicoba (Fallback jika High Demand)
+    // Urutan prioritas model untuk dicoba (Fallback jika High Demand/Quota)
     const priorityQueue = [
       'models/gemini-3.5-flash',
       'models/gemini-2.5-flash',
       'models/gemini-2.0-flash',
+      'models/gemini-2.0-flash-001',
+      'models/gemini-2.0-flash-lite',
+      'models/gemini-2.0-flash-lite-001',
       'models/gemini-1.5-flash',
       'models/gemini-1.5-flash-latest',
       'models/gemini-1.5-pro'
@@ -111,7 +128,7 @@ Pastikan mengembalikan JSON mentah yang bisa diparse dengan JSON.parse().`;
       const cleanModelName = modelName.replace('models/', '');
       try {
         response = await fetch(
-          `https://generativelanguage.googleapis.com/v1/models/${cleanModelName}:generateContent?key=${apiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${cleanModelName}:generateContent?key=${apiKey}`,
           {
             method: 'POST',
             headers: {
@@ -129,9 +146,13 @@ Pastikan mengembalikan JSON mentah yang bisa diparse dengan JSON.parse().`;
         const errorData = await response.json();
         const errorMessage = errorData.error?.message || 'Gagal terhubung ke API Gemini';
         
-        // Jika errornya high demand (503), lanjut ke model berikutnya di queue
-        if (response.status === 503 || errorMessage.toLowerCase().includes('high demand') || errorMessage.toLowerCase().includes('overloaded')) {
-          lastError = new Error(`Server Google penuh saat menggunakan ${cleanModelName}. Mencoba model alternatif...`);
+        // Jika errornya high demand (503), quota habis (429), ATAU model sudah dihapus Google (no longer available/not found)
+        const isHighDemand = response.status === 503 || errorMessage.toLowerCase().includes('high demand') || errorMessage.toLowerCase().includes('overloaded');
+        const isQuotaExceeded = response.status === 429 || errorMessage.toLowerCase().includes('quota exceeded');
+        const isUnavailable = response.status === 404 || errorMessage.toLowerCase().includes('no longer available') || errorMessage.toLowerCase().includes('not found') || errorMessage.toLowerCase().includes('deprecated');
+
+        if (isHighDemand || isQuotaExceeded || isUnavailable) {
+          lastError = new Error(`Model ${cleanModelName} gagal (sibuk/kuota/tidak tersedia). Mencoba alternatif...`);
           console.warn(lastError.message);
           continue; 
         }
@@ -141,17 +162,16 @@ Pastikan mengembalikan JSON mentah yang bisa diparse dengan JSON.parse().`;
 
       } catch (err) {
         lastError = err;
-        // Jika ini bukan error high demand, jangan lanjut loop (misal no internet)
-        if (!err.message.includes('Server Google penuh')) {
+        // Jika ini bukan error yang bisa diabaikan, jangan lanjut loop (misal no internet)
+        if (!err.message.includes('Mencoba alternatif')) {
            break;
         }
       }
     }
 
-    if (lastError && !response?.ok) {
-      throw new Error(lastError.message.includes('Server Google penuh') 
-        ? 'Semua server AI Google sedang sibuk (High Demand). Silakan coba lagi dalam beberapa menit.' 
-        : lastError.message);
+    if (lastError && (!response || !response.ok)) {
+      console.warn('Gemini API gagal total. Beralih ke Tesseract OCR Fallback...', lastError.message);
+      return await fallbackTesseractOCR(base64Image);
     }
 
     const data = await response.json();
@@ -175,6 +195,121 @@ Pastikan mengembalikan JSON mentah yang bisa diparse dengan JSON.parse().`;
 
   } catch (error) {
     console.error('Error processing receipt:', error);
-    throw error;
+    // Jika semua gagal (termasuk jaringan putus), coba Tesseract offline
+    try {
+      return await fallbackTesseractOCR(base64Image);
+    } catch (fallbackErr) {
+      throw new Error(`Sistem AI dan OCR Offline gagal: ${fallbackErr.message || 'Harap input manual.'}`);
+    }
   }
+}
+
+/**
+ * Fallback OCR menggunakan Tesseract.js langsung di browser
+ * Berguna saat kuota API Google habis atau diblokir.
+ */
+async function fallbackTesseractOCR(base64Image) {
+  return new Promise((resolve, reject) => {
+    // Load script Tesseract.js secara dinamis dari CDN jika belum ada
+    if (!window.Tesseract) {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+      script.onload = () => runTesseract(base64Image, resolve, reject);
+      script.onerror = () => reject(new Error('Gagal memuat sistem OCR Offline.'));
+      document.head.appendChild(script);
+    } else {
+      runTesseract(base64Image, resolve, reject);
+    }
+  });
+}
+
+async function runTesseract(base64Image, resolve, reject) {
+  try {
+    const { createWorker } = window.Tesseract;
+    // Menggunakan bahasa Inggris yang lebih stabil untuk angka, atau gabungan 'eng+ind'
+    const worker = await createWorker('eng'); 
+    
+    const { data: { text } } = await worker.recognize(base64Image);
+    await worker.terminate();
+
+    const items = parseReceiptText(text);
+    if (items.length === 0) {
+      // Jika tidak ada barang yang terdeteksi, lemparkan teks mentah agar pengguna tahu
+      const cleanText = text.replace(/\\n/g, ' ').substring(0, 100);
+      reject(new Error(`AI Offline gagal menemukan format harga. Teks terbaca: "${cleanText}..."`));
+      return;
+    }
+    resolve(items);
+  } catch (err) {
+    console.error('Tesseract Error:', err);
+    reject(err);
+  }
+}
+
+function parseReceiptText(text) {
+  const lines = text.split('\\n').map(l => l.trim()).filter(l => l.length > 0);
+  const items = [];
+  let globalPpnPersen = 0;
+
+  // Coba cari PPN Global di baris bawah
+  for (const line of lines) {
+    const upperLine = line.toUpperCase();
+    if (upperLine.includes('PPN')) {
+      const match = upperLine.match(/(\\d+)\\s*%/);
+      if (match) {
+        globalPpnPersen = parseInt(match[1]);
+      } else if (upperLine.includes('11')) {
+        globalPpnPersen = 11;
+      }
+    }
+  }
+
+  // Cari baris yang mirip item (ada angka di akhir)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const upperLine = line.toUpperCase();
+    
+    if (upperLine.includes('TOTAL') || upperLine.includes('SUB') || upperLine.includes('KEMBALI') || upperLine.includes('TUNAI') || upperLine.includes('PPN')) {
+      continue;
+    }
+
+    // Ekstrak angka dari baris. Biasa struk: Nama 1 15.000 15.000
+    // Ambil angka terakhir sebagai harga atau total
+    const numbers = line.match(/-?\\d+[.,]?\\d*/g);
+    if (numbers && numbers.length >= 1) {
+      // Ambil angka terakhir sebagai harga, bersihkan titik/koma
+      const lastNumStr = numbers[numbers.length - 1].replace(/[.,]/g, '');
+      const lastNum = parseInt(lastNumStr, 10);
+
+      if (!isNaN(lastNum) && lastNum > 100) { // Harga biasanya > 100 rupiah
+        // Cek apakah baris ini diskon (angka negatif)
+        if (lastNum < 0 || upperLine.includes('DISC')) {
+          if (items.length > 0) {
+            items[items.length - 1].diskonRupiah = (items[items.length - 1].diskonRupiah || 0) + Math.abs(lastNum);
+          }
+        } else {
+          // Cari qty (biasanya angka kecil 1-100 sebelum harga)
+          let qty = 1;
+          if (numbers.length >= 2) {
+            const potentialQtyStr = numbers[numbers.length - 2].replace(/[.,]/g, '');
+            const potentialQty = parseInt(potentialQtyStr, 10);
+            if (!isNaN(potentialQty) && potentialQty > 0 && potentialQty < 1000) {
+              qty = potentialQty;
+            }
+          }
+          
+          items.push({
+            harga: lastNum, // Sementara anggap angka terakhir sbg harga satuan/total
+            qty: qty,
+            diskonRupiah: 0,
+            diskonPersen: 0,
+            ppnRupiah: 0,
+            ppnPersen: globalPpnPersen
+          });
+        }
+      }
+    }
+  }
+
+  return items;
 }
