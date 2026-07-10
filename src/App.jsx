@@ -241,9 +241,11 @@ export default function App() {
       let dPersen = parseFloat(item.diskonPersen) || 0;
       if (dPersen > 0 && dRupiah === 0) {
         dRupiah = (totalHargaAwal * dPersen) / 100;
+      } else if (dRupiah > 0 && dPersen === 0) {
+        dPersen = totalHargaAwal > 0 ? (dRupiah / totalHargaAwal) * 100 : 0;
       }
-      row.diskonRupiah = dRupiah > 0 ? String(dRupiah) : '';
-      row.diskonPersen = dPersen > 0 ? String(dPersen) : '';
+      row.diskonRupiah = dRupiah > 0 ? String(Math.round(dRupiah * 100) / 100) : '';
+      row.diskonPersen = dPersen > 0 ? String(Math.round(dPersen * 100) / 100) : '';
 
       const hargaSetelahDiskon = totalHargaAwal - dRupiah;
 
@@ -251,9 +253,11 @@ export default function App() {
       let pPersen = parseFloat(item.ppnPersen) || 0;
       if (pPersen > 0 && pRupiah === 0) {
         pRupiah = (hargaSetelahDiskon * pPersen) / 100;
+      } else if (pRupiah > 0 && pPersen === 0) {
+        pPersen = hargaSetelahDiskon > 0 ? (pRupiah / hargaSetelahDiskon) * 100 : 0;
       }
-      row.ppnRupiah = pRupiah > 0 ? String(pRupiah) : '';
-      row.ppnPersen = pPersen > 0 ? String(pPersen) : '';
+      row.ppnRupiah = pRupiah > 0 ? String(Math.round(pRupiah * 100) / 100) : '';
+      row.ppnPersen = pPersen > 0 ? String(Math.round(pPersen * 100) / 100) : '';
 
       return row;
     });
