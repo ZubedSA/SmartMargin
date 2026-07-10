@@ -18,9 +18,10 @@ export function calculateRow(row) {
   const marginTarget = parseFloat(row.marginTarget) || 0;
   const marginGrosir1 = parseFloat(row.marginGrosir1) || 0;
   const marginGrosir2 = parseFloat(row.marginGrosir2) || 0;
+  const isTotalMode = row.isTotalMode === true;
 
   // 1. Total harga awal (sebelum diskon)
-  const totalHargaAwal = harga * qty;
+  const totalHargaAwal = isTotalMode ? harga : (harga * qty);
 
   // 2. Harga setelah diskon
   const hargaSetelahDiskon = totalHargaAwal - diskonRupiah;

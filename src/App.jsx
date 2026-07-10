@@ -20,6 +20,7 @@ function createEmptyRow(id) {
     marginTarget: '20',
     marginGrosir1: '15',
     marginGrosir2: '10',
+    isTotalMode: false,
   };
 }
 
@@ -154,9 +155,10 @@ export default function App() {
 
       let updatedRow = { ...row, [field]: value };
       
+      const isTotalMode = updatedRow.isTotalMode === true;
       const harga = parseFloat(updatedRow.harga) || 0;
       const qty = parseFloat(updatedRow.qty) || 1;
-      const totalHargaAwal = harga * qty;
+      const totalHargaAwal = isTotalMode ? harga : (harga * qty);
 
       // Handle diskon
       if (field === 'diskonPersen') {
@@ -233,6 +235,7 @@ export default function App() {
       
       row.harga = String(harga || '');
       row.qty = String(item.qty || '1');
+      row.isTotalMode = false;
 
       let dRupiah = parseFloat(item.diskonRupiah) || 0;
       let dPersen = parseFloat(item.diskonPersen) || 0;

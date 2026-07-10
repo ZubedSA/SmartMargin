@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronUp, Sparkles, ArrowRightLeft } from 'lucide-react';
 import InputField from './InputField';
 import AiInsightPanel from './AiInsightPanel';
 import { calculateRow, generateInsights, formatCurrency } from '../utils/aiEngine';
@@ -78,15 +78,34 @@ export default function CalculatorRow({ row, rowIndex, onUpdate, onDelete, isOnl
         <div className="px-4 pb-5 space-y-4 md:space-y-5 border-t border-slate-100 dark:border-slate-700/30 pt-4 md:pt-5 bg-slate-50/30 dark:bg-slate-900/40">
           {/* Input Fields */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-3 md:gap-4">
-            <InputField
-              label="Harga Modal"
-              value={row.harga}
-              onChange={handleChange('harga')}
-              type="number"
-              placeholder="0"
-              prefix="Rp"
-              className="col-span-2 lg:col-span-1"
-            />
+            <div className="col-span-2 lg:col-span-1 flex flex-col gap-1">
+              <InputField
+                label={
+                  <div className="flex items-center justify-between w-full">
+                    <span>{row.isTotalMode ? "Hrg Total" : "Hrg Satuan"}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleChange('isTotalMode')(!row.isTotalMode); }}
+                      className="flex items-center gap-1 px-1.5 py-0.5 rounded md:rounded-md bg-violet-100 dark:bg-violet-500/30 text-violet-700 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-500/50 transition-colors text-[9px] font-bold normal-case tracking-normal shadow-sm border border-violet-200 dark:border-violet-500/50 cursor-pointer"
+                      title={row.isTotalMode ? "Klik untuk ubah ke Harga per Pcs" : "Klik untuk ubah ke Harga Total"}
+                    >
+                      <ArrowRightLeft size={10} strokeWidth={2.5} />
+                      {row.isTotalMode ? 'ke /pcs' : 'ke Total'}
+                    </button>
+                  </div>
+                }
+                value={row.harga}
+                onChange={handleChange('harga')}
+                type="number"
+                placeholder="0"
+                prefix="Rp"
+              />
+              <p className="text-[9px] leading-snug text-slate-500 dark:text-slate-400 mt-0.5">
+                {row.isTotalMode 
+                  ? <><strong className="text-violet-600 dark:text-violet-400">Total Harga:</strong> Harga dibagi Qty (Cth: Beli borongan Rp 50rb dpt 5pcs)</>
+                  : <><strong className="text-violet-600 dark:text-violet-400">Harga Satuan:</strong> Harga dikali Qty (Cth: Sesuai di struk faktur)</>}
+              </p>
+            </div>
             <InputField
               label="Qty"
               value={row.qty}
