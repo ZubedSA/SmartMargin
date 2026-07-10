@@ -19,7 +19,8 @@ export async function processReceiptImage(base64Image, apiKey) {
 Saya akan memberikan foto nota/faktur/struk pembelian. 
 Tugas Anda adalah mengekstrak semua baris produk yang ada di nota tersebut.
 Untuk setiap produk fisik, temukan:
-- harga: Harga SATUAN sebelum dikali qty dan sebelum diskon/ppn. Kembalikan dalam angka (contoh: 150000). Jika tertulis total harga, pastikan 'harga' adalah harga satuannya jika memungkinkan, atau Anda bisa menaruh total harga dan membiarkan qty = 1.
+- hargaSatuan: Harga per 1 pcs (SATUAN) sebelum diskon/ppn. (angka)
+- hargaTotal: Harga total untuk baris tersebut (hargaSatuan dikali qty) sebelum diskon/ppn. JIKA di nota hanya ada total, isi ke sini. (angka)
 - qty: Jumlah barang. Jika tidak tertulis, default 1.
 - diskonRupiah: Jika ada diskon tertulis dalam nominal untuk barang tersebut. (Opsional, 0 jika tidak ada)
 - diskonPersen: Jika ada diskon tertulis dalam persentase. (Opsional, 0 jika tidak ada)
@@ -34,7 +35,8 @@ INSTRUKSI KRITIKAL:
 KEMBALIKAN OUTPUT HANYA DALAM FORMAT JSON ARRAY SEPERTI INI (TANPA MARKDOWN, TANPA TEKS LAIN):
 [
   {
-    "harga": 150000,
+    "hargaSatuan": 150000,
+    "hargaTotal": 750000,
     "qty": 5,
     "diskonRupiah": 0,
     "diskonPersen": 0,

@@ -229,13 +229,26 @@ export default function App() {
   const handleScannerSuccess = (parsedItems) => {
     const newRows = parsedItems.map(item => {
       const row = createEmptyRow();
-      const harga = parseFloat(item.harga) || 0;
+      
+      // Ambil prioritas: 1. hargaTotal, 2. hargaSatuan, 3. harga (fallback lama)
+      let harga = parseFloat(item.hargaTotal) || parseFloat(item.hargaSatuan) || parseFloat(item.harga) || 0;
       const qty = parseFloat(item.qty) || 1;
-      const totalHargaAwal = harga * qty;
+      
+      // Tentukan mode berdasarkan data yang ada
+      let isTotalMode = false;
+      if (item.hargaTotal !== undefined && item.hargaTotal !== null) {
+        // Jika AI menemukan harga total baris, gunakan mode Hrg Total agar akurat
+        isTotalMode = true;
+      } else if (item.hargaSatuan === undefined && item.harga !== undefined) {
+        // Fallback untuk prompt lama
+        isTotalMode = false;
+      }
+      
+      const totalHargaAwal = isTotalMode ? harga : (harga * qty);
       
       row.harga = String(harga || '');
       row.qty = String(item.qty || '1');
-      row.isTotalMode = false;
+      row.isTotalMode = isTotalMode;
 
       let dRupiah = parseFloat(item.diskonRupiah) || 0;
       let dPersen = parseFloat(item.diskonPersen) || 0;
